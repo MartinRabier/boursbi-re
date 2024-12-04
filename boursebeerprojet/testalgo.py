@@ -4,6 +4,31 @@ from matplotlib.widgets import Button
 import numpy as np
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from PIL import Image
+from datetime import datetime,timedelta
+from matplotlib.animation import FuncAnimation
+from matplotlib.ticker import FuncFormatter
+
+
+def format_func(value, tick_number):
+    minutes = int(value // 60)
+    seconds = int(value % 60)
+    return f"{minutes}min {seconds}s"
+
+# Classe Horloge
+
+class Timer:
+    def __init__(self):
+        self.start_time = datetime.now()
+
+    def elapsed(self):
+        elapsed = datetime.now() - self.start_time
+        return elapsed.total_seconds()
+    
+    def formatage(self):
+        total = int(self.elapsed())
+        minutes = total//60
+        secondes = total%60
+        return f"{minutes}min {secondes}s"
 
 # Classe action
 class Stock:
@@ -14,7 +39,7 @@ class Stock:
     
     def update_price(self, change):
         self.price += change
-        if self.price < 1:  
+        if self.price < 1:  #minimum set
             self.price = 1
         self.price_history.append(self.price)
 
@@ -22,6 +47,8 @@ class Stock:
 class Market:
     def __init__(self, stocks):
         self.stocks = stocks
+        self.time_points = [0]
+        self.timer = Timer()
         self.fig, self.ax = plt.subplots(figsize=(10, 6))  #initialisation figure
         self.buttons = []  
         plt.ion()  #affichage live
@@ -38,6 +65,7 @@ class Market:
             return False
     
     def update_market(self, bought_stock):
+        self.time_points.append(len(self.time_points))
         var = np.array([-0.1, -0.05, 0, 0.05, 0.1])
         variation = np.random.choice(var[:3])  # fluctu autres
         achat = np.random.choice(var[3:])  # fluctu achat
@@ -46,6 +74,7 @@ class Market:
                 stock.update_price(achat)  # update
             else:
                 stock.update_price(variation)  # update
+
     
     def event_crash(self, event_stock):
     
@@ -71,35 +100,43 @@ class Market:
                 stock.update_price(-np.random.choice(var2))  # update
             stock.price_history.append(stock.price)  # log
 
+    def background_fluctuations(self):
+        elapsed = self.timer.elapsed()
+        self.time_points.append(elapsed)
+        for stock in self.stocks:
+            var = np.random.choice([-0.05, 0,0.05]) #variation minimes continuelles
+            stock.update_price(var)
+
 
     def plot_prices(self):
         self.ax.clear()  # Clear 
         # Plot 
+        self.ax.clear()
         for stock in self.stocks:
-            self.ax.plot(stock.price_history, label=stock.name)
-        
+            self.ax.plot(self.time_points, stock.price_history, label=stock.name)
+    
         self.ax.set_title("Prix des Bières")
-        self.ax.set_xlabel("Temps")
+        self.ax.set_xlabel("Temps (mm:ss)")
         self.ax.set_ylabel("Prix")
         self.ax.legend()
         self.ax.grid(True)
-        
-        # affichage prix
+    
+        # Set x-axis formatting
+        self.ax.xaxis.set_major_formatter(FuncFormatter(format_func))
+    
         for stock in self.stocks:
-            self.ax.text(len(stock.price_history) - 1, stock.price_history[-1], 
-                         f'{stock.price:.2f}', fontsize=9, 
-                         verticalalignment='bottom', horizontalalignment='center')
+            self.ax.text(self.time_points[-1], stock.price_history[-1], f'{stock.price:.2f}', fontsize=9,verticalalignment='bottom', horizontalalignment='center')
         
 
         #affichage logo
-        logo_path = "logo.png"  
-        logo_image = Image.open(logo_path)
-        imagebox = OffsetImage(logo_image, zoom=0.05)   #ajuster la taille
+        #logo_path = "logo.png"  
+        #logo_image = Image.open(logo_path)
+        #imagebox = OffsetImage(logo_image, zoom=0.05)   #ajuster la taille
     
         #placement
-        ab = AnnotationBbox(imagebox, (1, 1), frameon=False, 
-                            xycoords='axes fraction', box_alignment=(-0.1, 6.5)) #position %axes
-        self.ax.add_artist(ab)
+        #ab = AnnotationBbox(imagebox, (1, 1), frameon=False, 
+                            #xycoords='axes fraction', box_alignment=(-0.1, 6.5)) #position %axes
+        #self.ax.add_artist(ab)
 
         self.fig.canvas.draw_idle()  # refresh canva
         self.fig.canvas.flush_events()  # GUI update
@@ -143,6 +180,10 @@ class Market:
         self.event_BR(stock_obj)
         self.plot_prices()
 
+    def animate(self,frame):
+        self.background_fluctuations()  # Apply small fluctuations
+        self.plot_prices()
+
 
 # classe acheteur
 class Agent:
@@ -166,6 +207,7 @@ agent = Agent("Martin", market)
 if __name__ == "__main__":
     market.plot_prices()  # plot initial
     market.setup_buttons()  # ajouts boutons
+    ani = FuncAnimation(market.fig, market.animate, interval=1000)
     plt.show(block=True)  # maintenir display
 
 
